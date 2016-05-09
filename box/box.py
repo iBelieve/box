@@ -11,6 +11,7 @@ class Box(object):
         self.path = self.find_root()
 
         self.chroot = Chroot(self.resolve('.box'))
+        self.chroot.bind_ro = [self.path + ':/source']
 
         if os.path.exists(self.config_file):
             self.config = load_yaml(self.config_file)
@@ -20,9 +21,13 @@ class Box(object):
         if self.config:
             self.chroot.install(self.config.get('depends', []))
         self.save_config()
+        self.chroot.run('mkdir /build')
 
     def clean(self):
         self.create(force=True)
+
+    def destroy(self):
+        print('Error: destroy not implemented yet!')
 
     def install(self, *packages):
         self.chroot.install(packages)
@@ -30,23 +35,42 @@ class Box(object):
         self.save_config()
 
     def build(self):
-        for cmd in self.config.get('build', []):
-            self.chroot.run(cmd)
+        if not self.config.get('build'):
+            print('Error: No build steps specified in the Boxfile.')
+
+        self._run(self.config['build'])
 
     def run(self, cmd=None):
         if 'run' in self.config:
             cmd = self.config['run']
 
         if cmd is None:
-            print('No command specified on the command line or in the Boxfile')
+            print('Error: No command specified on the command line or in the Boxfile.')
             return
 
-        self.chroot.run(cmd)
+        self._run(cmd)
+
+    def check(self, cmd=None):
+        if 'check' in self.config:
+            cmd = self.config['check']
+
+        if cmd is None:
+            print('Error: No check command specified in the Boxfile.')
+        return
+
+        self._run(cmd)
+
+    def _run(self, cmd):
+        if isinstance(cmd, list):
+            for one_cmd in cmd:
+                self._run(one_cmd)
+        else:
+            self.chroot.run(cmd.format(src='/source'), workdir='/build')
 
     def find_root(self):
         cwd = os.getcwd()
         parts = cwd.split(os.path.sep)
-        for index in reversed(range(0, len(parts))):
+        for index in range(len(parts), 0, -1):
             path = os.path.sep.join(parts[:index])
             if os.path.exists(os.path.join(path, 'Boxfile')):
                 return path
