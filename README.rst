@@ -2,7 +2,7 @@
 Box - Virtualenv for Generic Linux Projects
 ===========================================
 
-Box is a same virtualenv-like container solution for developing and testing software on Linux. Create a box, add your dependencies, and then build and run your software.
+Box is a virtualenv-like container solution for building and testing software on Linux. Create a box, add your dependencies, and then build and run your software. Done with your project? Delete the box and don't worry about leaving extra unneeded dependencies sitting around on your computer. Want to make sure you didn't miss any dependencies in your README or package build file? Just test in a box and add packages until your project runs correctly.
 
 It's built on top of systemd-nspawn, and creates a lightweight ArchLinux container so you always test with the latest versions of dependencies.
 
