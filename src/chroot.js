@@ -30,8 +30,9 @@ export class Chroot {
         await this.exec(`pacman -S --noconfirm ${packages}`)
     }
 
-    async exec(command, { workdir } = {}) {
-        await systemd_nspawn(this.workdir, command, { workdir: workdir, binds: this.binds,
+    async exec(command, { workdir, user } = {}) {
+        await systemd_nspawn(this.workdir, command, { workdir: workdir, user: user,
+                                                      binds: this.binds,
                                                       setenvs: this.setenvs })
     }
 }
@@ -40,11 +41,14 @@ async function pacstrap(workdir, packages) {
     await exec(['pacstrap', '-cd', workdir, 'base', 'base-devel'] + packages)
 }
 
-async function systemd_nspawn(chrootPath, command, { workdir, binds = [], setenvs = [] } = {}) {
+async function systemd_nspawn(chrootPath, command, { workdir, user, binds = [], setenvs = [] } = {}) {
     let args = []
 
     if (workdir)
         args.push(`--chdir=${workdir}`)
+
+    if (user)
+        args.push(`--user=${user}`)
 
     args = args.concat(binds.map(bind => `--bind=${bind}`))
     args = args.concat(setenvs.map(setenv => `--setenv=${setenv}`))

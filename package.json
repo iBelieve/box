@@ -35,6 +35,7 @@
     "async-file": "^2.0.0",
     "babel-runtime": "^6.9.2",
     "colors": "^1.1.2",
+    "username": "^2.2.2",
     "yamljs": "^0.2.8",
     "yargs": "^4.7.1"
   }

@@ -1,6 +1,7 @@
 import fs from 'async-file'
 import path from 'path'
 import yaml from 'yamljs'
+import username from 'username'
 import 'colors'
 import {Chroot, exec} from './chroot'
 
@@ -127,21 +128,23 @@ class Module {
 
         this.chroot.status(`Testing ${this.name}`, 'blue')
 
-        await this.execTarget('test', 'xvfb-run -a -s "-screen 0 800x600x24"')
+        await this.execTarget('test', {prefix: 'xvfb-run -a -s "-screen 0 800x600x24"'})
     }
 
     async run() {
         if (!this.hasTarget('run'))
             return
 
+        const user = await username()
+
         await this.build()
 
         this.chroot.status(`Running ${this.name}`, 'blue')
 
-        await this.execTarget('run')
+        await this.execTarget('run', {user: user})
     }
 
-    async execTarget(target, prefix) {
+    async execTarget(target, { prefix, user } = {}) {
         if (!this.hasTarget(target))
             return
 
@@ -156,7 +159,7 @@ class Module {
             if (prefix)
                 step = `${prefix} ${step}`
 
-            await this.chroot.exec(step, { workdir: this.workdir })
+            await this.chroot.exec(step, { workdir: this.workdir, user: user })
         }
     }
 }
