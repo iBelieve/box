@@ -60,7 +60,7 @@ export async function exec(command, { workdir } = {}) {
             if (code === 0)
                 resolve()
             else
-                reject(`Command failed: ${command}`)
+                reject()
         })
 
         child.on('error', (error) => {

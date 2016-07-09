@@ -37,109 +37,109 @@ export class Box extends Chroot {
         console.log(text)
     }
 
+    getModule(name) {
+        const config = this.config['modules'][name]
+
+        return new Module(this, name, config)
+    }
+
     async installDependencies() {
         this.status('Installing dependencies', 'magenta')
         await this.installPackages(this.config['dependencies'])
     }
 
-    async configure(moduleName) {
+    async execTarget(moduleName, target) {
         if (moduleName) {
-            await this.configureModule(moduleName, this.config['modules'][moduleName])
+            await this.getModule(moduleName)[target]()
         } else {
-            for (const [name, steps] of Object.entries(this.config['modules'])) {
-                await this.configureModule(name, steps)
+            for (const [name, config] of Object.entries(this.config['modules'])) {
+                const module = new Module(this, name, config)
+
+                await module[target]()
             }
         }
+    }
+
+    async configure(moduleName) {
+        await this.execTarget(moduleName, 'configure')
     }
 
     async build(moduleName) {
-        if (moduleName) {
-            await this.buildModule(moduleName, this.config['modules'][moduleName])
-        } else {
-            for (const [name, steps] of Object.entries(this.config['modules'])) {
-                await this.buildModule(name, steps)
-            }
-        }
+        await this.execTarget(moduleName, 'build')
     }
 
     async test(moduleName) {
-        if (moduleName) {
-            await this.testModule(moduleName, this.config['modules'][moduleName])
-        } else {
-            for (const [name, steps] of Object.entries(this.config['modules'])) {
-                await this.testModule(name, steps)
-            }
-        }
+        await this.execTarget(moduleName, 'test')
     }
 
     async run(moduleName) {
-        await this.runModule(moduleName, this.config['modules'][moduleName])
+        await this.execTarget(moduleName, 'run')
+    }
+}
+
+class Module {
+    constructor(chroot, name, config) {
+        this.chroot = chroot
+        this.name = name
+        this.config = config
+        this.local_workdir = `${name}/build`
+        this.workdir = path.join(chroot.root, this.local_workdir)
     }
 
-    async configureModule(name, module) {
-        this.status(`Configuring ${name}`, 'blue')
+    async buildDirExists() {
+        return await fs.exists(this.local_workdir)
+    }
 
-        const workdir = `${name}/build`
+    async configure() {
+        this.chroot.status(`Configuring ${this.name}`, 'blue')
 
-        if (!(await fs.exists(workdir))) {
-            await fs.mkdir(workdir)
+        if (!(await this.buildDirExists())) {
+            await fs.mkdir(this.local_workdir)
         }
 
-        await this.execTarget(module['configure'], { workdir: path.join(this.root, workdir) })
+        await this.execTarget('configure')
     }
 
-    async buildModule(name, module) {
-        const workdir = `${name}/build`
-
-        if (!(await fs.exists(workdir))) {
-            this.status(`Configuring ${name}`, 'blue')
-            await fs.mkdir(workdir)
-            await this.execTarget(module['configure'], { workdir: path.join(this.root, workdir) })
+    async build() {
+        if (!(await this.buildDirExists())) {
+            this.chroot.status(`Configuring ${this.name}`, 'blue')
+            await fs.mkdir(this.local_workdir)
+            await this.execTarget('configure')
         }
 
-        this.status(`Building ${name}`, 'blue')
-
-        await this.execTarget(module['build'], { workdir: path.join(this.root, workdir) })
+        this.chroot.status(`Building ${this.name}`, 'blue')
+        await this.execTarget('build')
     }
 
-    async testModule(name, module) {
-        const workdir = `${name}/build`
+    async test() {
+        await this.build()
 
-        await this.buildModule(name, module)
+        this.chroot.status(`Testing ${this.name}`, 'blue')
 
-        this.status(`Testing ${name}`, 'blue')
-
-        await this.execTarget(module['test'], { workdir: path.join(this.root, workdir),
-                                               prefix: 'xvfb-run -a -s "-screen 0 800x600x24"' })
+        await this.execTarget('test', 'xvfb-run -a -s "-screen 0 800x600x24"')
     }
 
-    async runModule(name, module) {
-        const workdir = `${name}/build`
+    async run() {
+        await this.build()
 
-        await this.buildModule(name, module)
+        this.chroot.status(`Running ${this.name}`, 'blue')
 
-        this.status(`Running ${name}`, 'blue')
-
-        await this.execTarget(module['run'], { workdir: path.join(this.root, workdir) })
+        await this.execTarget('run')
     }
 
-    async execTarget(target, { workdir, prefix } = {}) {
-        if (target instanceof Array) {
-            for (const step of target) {
-                await this.execTarget(step, { workdir: workdir, prefix: prefix })
-            }
+    async execTarget(target, prefix) {
+        const steps = this.config[target] instanceof Array ? this.config[target]
+                                                           : [this.config[target]]
 
-            return
+        for (let step of steps) {
+            this.chroot.status(`+ ${step}`, 'grey', {bold: false})
+
+            step = step.replace('${srcdir}', '..')
+
+            if (prefix)
+                step = `${prefix} ${step}`
+
+            await this.chroot.exec(step, { workdir: this.workdir })
         }
-
-        target = target.replace('${srcdir}', '..')
-
-        this.status(`+ ${target}`, 'grey', {bold: false})
-
-        if (prefix) {
-            target = `${prefix} ${target}`
-        }
-
-        await this.exec(target, { workdir: workdir })
     }
 }

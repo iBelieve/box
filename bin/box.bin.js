@@ -37,5 +37,5 @@ promise
         box.status('Success', 'green')
     })
     .catch(function(error) {
-        box.status('Failure!', 'red')
+        box.status(error ? 'Failure: ' + error : 'Failure!', 'red')
     })
