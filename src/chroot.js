@@ -1,4 +1,4 @@
-import shell from 'shelljs'
+import {spawn} from 'child_process'
 
 export class Chroot {
     constructor(workdir) {
@@ -44,11 +44,17 @@ async function systemd_nspawn(chrootPath, command, { workdir, binds = [] } = {})
 
 async function run(command, { workdir } = {}) {
     return new Promise((resolve, reject) => {
-        shell.exec(command, { cwd: workdir }, (code, stdout, stderr) => {
+        const child = spawn(command, { cwd: workdir, stdio: 'inherit', shell: true })
+
+        child.on('exit', (code) => {
             if (code === 0)
-                resolve(stdout)
+                resolve()
             else
-                reject(stderr)
+                reject()
+        })
+
+        child.on('error', (error) => {
+            reject(error)
         })
     })
 }
