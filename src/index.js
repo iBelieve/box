@@ -2,20 +2,39 @@ import fs from 'async-file'
 import path from 'path'
 import yaml from 'yamljs'
 import 'colors'
-import {Chroot} from './chroot'
+import {Chroot, exec} from './chroot'
 
 export class Box extends Chroot {
     constructor(name) {
         super(`/var/lib/machines/${name}`)
         this.config = yaml.load('box.yml')
         this.root = ''
+
+        exec('xhost +local:')
+
+        this.mount('/tmp/.X11-unix')
+        this.mount('/dev/shm')
+        this.mount('/run/user/1000', '/run/user/host')
+        this.setenv('DISPLAY', ':0')
+        this.setenv('XDG_RUNTIME_DIR', '/run/user/host')
     }
 
-    status(text, color) {
-        text = ` ${text} `
+    status(text, color, { bold = true } = {}) {
         const bgColor = `bg${color[0].toUpperCase()}${color.slice(1)}`
 
-        console.log(text.bold[bgColor] + ''[color])
+        text = ` ${text} `
+
+        if (bold)
+            text = text.bold
+
+        if (color === 'grey')
+            text = text.grey.bgWhite.inverse
+        else
+            text = text[bgColor]
+
+        text += ''[color]
+
+        console.log(text)
     }
 
     async installDependencies() {
@@ -53,6 +72,10 @@ export class Box extends Chroot {
         }
     }
 
+    async run(moduleName) {
+        await this.runModule(moduleName, this.config['modules'][moduleName])
+    }
+
     async configureModule(name, module) {
         this.status(`Configuring ${name}`, 'blue')
 
@@ -62,7 +85,7 @@ export class Box extends Chroot {
             await fs.mkdir(workdir)
         }
 
-        await this.runTarget(module['configure'], { workdir: path.join(this.root, workdir) })
+        await this.execTarget(module['configure'], { workdir: path.join(this.root, workdir) })
     }
 
     async buildModule(name, module) {
@@ -71,12 +94,12 @@ export class Box extends Chroot {
         if (!(await fs.exists(workdir))) {
             this.status(`Configuring ${name}`, 'blue')
             await fs.mkdir(workdir)
-            await this.runTarget(module['configure'], { workdir: path.join(this.root, workdir) })
+            await this.execTarget(module['configure'], { workdir: path.join(this.root, workdir) })
         }
 
         this.status(`Building ${name}`, 'blue')
 
-        await this.runTarget(module['build'], { workdir: path.join(this.root, workdir) })
+        await this.execTarget(module['build'], { workdir: path.join(this.root, workdir) })
     }
 
     async testModule(name, module) {
@@ -86,24 +109,24 @@ export class Box extends Chroot {
 
         this.status(`Testing ${name}`, 'blue')
 
-        await this.runTarget(module['test'], { workdir: path.join(this.root, workdir),
+        await this.execTarget(module['test'], { workdir: path.join(this.root, workdir),
                                                prefix: 'xvfb-run -a -s "-screen 0 800x600x24"' })
     }
 
     async runModule(name, module) {
-        this.status(`Running ${name}`, 'blue')
-
         const workdir = `${name}/build`
 
         await this.buildModule(name, module)
 
-        await this.runTarget(module['run'], { workdir: path.join(this.root, workdir) })
+        this.status(`Running ${name}`, 'blue')
+
+        await this.execTarget(module['run'], { workdir: path.join(this.root, workdir) })
     }
 
-    async runTarget(target, { workdir, prefix } = {}) {
+    async execTarget(target, { workdir, prefix } = {}) {
         if (target instanceof Array) {
             for (const step of target) {
-                await this.runTarget(step, { workdir: workdir, prefix: prefix })
+                await this.execTarget(step, { workdir: workdir, prefix: prefix })
             }
 
             return
@@ -111,10 +134,12 @@ export class Box extends Chroot {
 
         target = target.replace('${srcdir}', '..')
 
+        this.status(`+ ${target}`, 'grey', {bold: false})
+
         if (prefix) {
             target = `${prefix} ${target}`
         }
 
-        await this.run(target, { workdir: workdir })
+        await this.exec(target, { workdir: workdir })
     }
 }
