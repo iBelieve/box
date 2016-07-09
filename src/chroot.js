@@ -27,7 +27,7 @@ export class Chroot {
         if (packages.join)
             packages = packages.join(' ')
 
-        await this.run(`pacman -S --noconfirm ${packages}`)
+        await this.exec(`pacman -S --noconfirm ${packages}`)
     }
 
     async exec(command, { workdir } = {}) {

@@ -75,6 +75,10 @@ export class Box extends Chroot {
     async run(moduleName) {
         await this.execTarget(moduleName, 'run')
     }
+
+    async shell() {
+        await this.exec('bash')
+    }
 }
 
 class Module {
@@ -84,6 +88,10 @@ class Module {
         this.config = config
         this.local_workdir = `${name}/build`
         this.workdir = path.join(chroot.root, this.local_workdir)
+    }
+
+    hasTarget(target) {
+        return this.config[target] != null
     }
 
     async buildDirExists() {
@@ -112,6 +120,9 @@ class Module {
     }
 
     async test() {
+        if (!this.hasTarget('test'))
+            return
+
         await this.build()
 
         this.chroot.status(`Testing ${this.name}`, 'blue')
@@ -120,6 +131,9 @@ class Module {
     }
 
     async run() {
+        if (!this.hasTarget('run'))
+            return
+
         await this.build()
 
         this.chroot.status(`Running ${this.name}`, 'blue')
@@ -128,6 +142,9 @@ class Module {
     }
 
     async execTarget(target, prefix) {
+        if (!this.hasTarget(target))
+            return
+
         const steps = this.config[target] instanceof Array ? this.config[target]
                                                            : [this.config[target]]
 

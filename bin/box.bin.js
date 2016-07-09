@@ -31,6 +31,8 @@ else if (command == 'run')
     promise = box.run(arg)
 else if (command == 'configure')
     promise = box.configure(arg)
+else if (command == 'shell')
+    promise = box.shell()
 
 promise
     .then(function() {
