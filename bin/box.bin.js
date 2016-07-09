@@ -34,8 +34,8 @@ else if (command == 'configure')
 
 promise
     .then(function() {
-        console.log('::: SUCCESS :::'.green)
+        box.status('Success', 'green')
     })
     .catch(function(error) {
-        console.error(`::: ERROR ::: ${error} :::`.red)
+        box.status('Failure!', 'red')
     })

@@ -11,8 +11,15 @@ export class Box extends Chroot {
         this.root = ''
     }
 
+    status(text, color) {
+        text = ` ${text} `
+        const bgColor = `bg${color[0].toUpperCase()}${color.slice(1)}`
+
+        console.log(text.bold[bgColor] + ''[color])
+    }
+
     async installDependencies() {
-        console.log('::: Installing dependencies :::'.magenta)
+        this.status('Installing dependencies', 'magenta')
         await this.installPackages(this.config['dependencies'])
     }
 
@@ -47,7 +54,7 @@ export class Box extends Chroot {
     }
 
     async configureModule(name, module) {
-        console.log(`::: Configuring ${name} :::`.blue)
+        this.status(`Configuring ${name}`, 'blue')
 
         const workdir = `${name}/build`
 
@@ -62,12 +69,12 @@ export class Box extends Chroot {
         const workdir = `${name}/build`
 
         if (!(await fs.exists(workdir))) {
-            console.log(`::: Configuring ${name} :::`.blue)
+            this.status(`Configuring ${name}`, 'blue')
             await fs.mkdir(workdir)
             await this.runTarget(module['configure'], { workdir: path.join(this.root, workdir) })
         }
 
-        console.log(`::: Building ${name} :::`.blue)
+        this.status(`Building ${name}`, 'blue')
 
         await this.runTarget(module['build'], { workdir: path.join(this.root, workdir) })
     }
@@ -77,14 +84,14 @@ export class Box extends Chroot {
 
         await this.buildModule(name, module)
 
-        console.log(`::: Testing ${name} :::`.blue)
+        this.status(`Testing ${name}`, 'blue')
 
         await this.runTarget(module['test'], { workdir: path.join(this.root, workdir),
                                                prefix: 'xvfb-run -a -s "-screen 0 800x600x24"' })
     }
 
     async runModule(name, module) {
-        console.log(`::: Running ${name} :::`.blue)
+        this.status(`Running ${name}`, 'blue')
 
         const workdir = `${name}/build`
 
