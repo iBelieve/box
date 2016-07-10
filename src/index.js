@@ -4,14 +4,19 @@ import yaml from 'yamljs'
 import username from 'username'
 import 'colors'
 import {Chroot, exec} from './chroot'
+import {findFile} from './util'
 
 export class Box extends Chroot {
     constructor(name) {
         super(`/var/lib/machines/${name}`)
-        this.config = yaml.load('box.yml')
+
+        const configFilename = findFile('box.yml')
+
+        this.sourceDir = path.dirname(configFilename)
+        this.config = yaml.load(configFilename)
         this.root = ''
 
-        exec('xhost +local:')
+        exec('xhost +local: > /dev/null')
 
         this.mount('/tmp/.X11-unix')
         this.mount('/dev/shm')
@@ -20,7 +25,7 @@ export class Box extends Chroot {
         this.setenv('XDG_RUNTIME_DIR', '/run/user/host')
     }
 
-    status(text, color, { bold = true } = {}) {
+    print(text, color, { bold = true, secondary } = {}) {
         const bgColor = `bg${color[0].toUpperCase()}${color.slice(1)}`
 
         text = ` ${text} `
@@ -35,6 +40,9 @@ export class Box extends Chroot {
 
         text += ''[color]
 
+        if (secondary)
+            text += ` ${secondary}`
+
         console.log(text)
     }
 
@@ -45,18 +53,57 @@ export class Box extends Chroot {
     }
 
     async installDependencies() {
-        this.status('Installing dependencies', 'magenta')
+        this.print('Installing dependencies', 'magenta')
         await this.installPackages(this.config['dependencies'])
     }
 
-    async execTarget(moduleName, target) {
+    async perModule(moduleName, callback) {
         if (moduleName) {
-            await this.getModule(moduleName)[target]()
+            await callback(this.getModule(moduleName))
         } else {
             for (const [name, config] of Object.entries(this.config['modules'])) {
                 const module = new Module(this, name, config)
 
-                await module[target]()
+                await callback(module)
+            }
+        }
+    }
+
+    async execTarget(moduleName, target, {printSuccess = true} = {}) {
+        try {
+            await this.perModule(moduleName, (module) => module[target]())
+
+            if (printSuccess)
+                this.print('Success', 'green')
+        } catch (error) {
+            this.print(error ? `Failure: ${error}` : 'Failure!', 'red')
+        }
+    }
+
+    async pull(moduleName) {
+        await this.execTarget(moduleName, 'pull')
+    }
+
+    async status(moduleName) {
+        if (moduleName) {
+            if (await this.getModule(moduleName).hasUncommitedChanges()) {
+                this.print('Uncommitted changes', 'yellow', { secondary: moduleName })
+            }
+        } else {
+            const modules = []
+
+            for (const [name, config] of Object.entries(this.config['modules'])) {
+                const module = new Module(this, name, config)
+
+                if (await module.hasUncommitedChanges())
+                    modules.push(name)
+            }
+
+            if (modules.length > 0) {
+                this.print('Uncommitted changes', 'yellow')
+                for (const module of modules) {
+                    console.log(` - ${module}`)
+                }
             }
         }
     }
@@ -87,8 +134,8 @@ class Module {
         this.chroot = chroot
         this.name = name
         this.config = config
-        this.local_workdir = `${name}/build`
-        this.workdir = path.join(chroot.root, this.local_workdir)
+        this.local_workdir = path.resolve(chroot.sourceDir, `${name}/build`)
+        this.workdir = path.join(chroot.root, `${name}/build`)
     }
 
     hasTarget(target) {
@@ -99,8 +146,22 @@ class Module {
         return await fs.exists(this.local_workdir)
     }
 
+    async pull() {
+        this.chroot.print(`Pulling updates for ${this.name}`, 'magenta')
+        await exec('git pull', { workdir: module.local_workdir })
+    }
+
+    async hasUncommitedChanges() {
+        try {
+            await exec('git diff-index --quiet HEAD --', { workdir: this.local_workdir })
+            return false
+        } catch (error) {
+            return true
+        }
+    }
+
     async configure() {
-        this.chroot.status(`Configuring ${this.name}`, 'blue')
+        this.chroot.print(`Configuring ${this.name}`, 'blue')
 
         if (!(await this.buildDirExists())) {
             await fs.mkdir(this.local_workdir)
@@ -111,12 +172,12 @@ class Module {
 
     async build() {
         if (!(await this.buildDirExists())) {
-            this.chroot.status(`Configuring ${this.name}`, 'blue')
+            this.chroot.print(`Configuring ${this.name}`, 'blue')
             await fs.mkdir(this.local_workdir)
             await this.execTarget('configure')
         }
 
-        this.chroot.status(`Building ${this.name}`, 'blue')
+        this.chroot.print(`Building ${this.name}`, 'blue')
         await this.execTarget('build')
     }
 
@@ -126,7 +187,7 @@ class Module {
 
         await this.build()
 
-        this.chroot.status(`Testing ${this.name}`, 'blue')
+        this.chroot.print(`Testing ${this.name}`, 'blue')
 
         await this.execTarget('test', {prefix: 'xvfb-run -a -s "-screen 0 800x600x24"'})
     }
@@ -139,7 +200,7 @@ class Module {
 
         await this.build()
 
-        this.chroot.status(`Running ${this.name}`, 'blue')
+        this.chroot.print(`Running ${this.name}`, 'blue')
 
         await this.execTarget('run', {user: user})
     }
@@ -152,7 +213,7 @@ class Module {
                                                            : [this.config[target]]
 
         for (let step of steps) {
-            this.chroot.status(`+ ${step}`, 'grey', {bold: false})
+            this.chroot.print(`+ ${step}`, 'grey', {bold: false})
 
             step = step.replace('${srcdir}', '..')
 

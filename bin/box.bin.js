@@ -19,25 +19,19 @@ box.root = '/developer/hawaiios'
 var command = args._[0]
 var arg = args._.length > 1 ? args._[1] : undefined
 
-var promise
-
 if (command == 'install')
-    promise = box.installDependencies()
+    box.installDependencies()
+else if (command == 'pull')
+    box.pull(arg)
+else if (command == 'status')
+    box.status(arg)
 else if (command == 'build')
-    promise = box.build(arg)
+    box.build(arg)
 else if (command == 'test')
-    promise = box.test(arg)
+    box.test(arg)
 else if (command == 'run')
-    promise = box.run(arg)
+    box.run(arg)
 else if (command == 'configure')
-    promise = box.configure(arg)
+    box.configure(arg)
 else if (command == 'shell')
-    promise = box.shell()
-
-promise
-    .then(function() {
-        box.status('Success', 'green')
-    })
-    .catch(function(error) {
-        box.status(error ? 'Failure: ' + error : 'Failure!', 'red')
-    })
+    box.shell()
